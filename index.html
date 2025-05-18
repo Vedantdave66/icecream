@@ -81,47 +81,47 @@
   <script>
     const friendName = prompt("What’s your friend’s name?") || "[Friend's Name]";
     const container = document.getElementById("container");
+
     const bgImages = [
-      "dahlia1.png", "dahlia2.png", "dahlia3.png", "dahlia4.png",
-      "rose1.png", "rose2.png", "rose3.png", "rose4.png"
+      "dahlia1.png",
+      "dahlia2.png",
+      "dahlia3.png",
+      "dahlia4.png"
     ];
+
     const messages = [
-      `Hey ${friendName}! 🍦 I built something for you...`,
-     "It,s only right to ask before assuming but...",
-     "This Friday....",
-     "ICE CREAM 🍨? You and I?(I wouldve done the same for Sophie so dont get excited:0)",
-     ""
+      `Hey ${friendName}! 🍦 This might be a little shit but...`,
+      "It’s only right to ask before assuming but...",
+      "This Friday....",
+      "ICE CREAM 🍨 ? You and I? (I would've done the same for Sophie so don’t get excited :0)"
     ];
 
     let clickCount = 0;
-    const initialMessage = () => `<div class="block visible">Hey ${friendName}! 🍦 I built something for you...</div>`;
+    const initialMessage = () => `<div class="block visible">${messages[0]}</div>`;
     container.innerHTML = initialMessage();
     document.body.style.backgroundImage = `url(${bgImages[0]})`;
 
     function spawnFlower(x, y) {
-      const flowers = ["rose1.png", "rose2.png", "dahlia1.png", "dahlia2.png", "dahlia3.png", "dahlia4.png"];
-      const types = ["dahlia1.png", "dahlia2.png", "dahlia3.png"];
-
-      types.forEach(src => {
+      const types = ["dahlia1.png", "dahlia2.png", "dahlia3.png", "dahlia4.png"];
+      for (let i = 0; i < 3; i++) {
         const flower = document.createElement("img");
-        flower.src = src;
+        flower.src = types[Math.floor(Math.random() * types.length)];
         flower.className = "flower";
         flower.style.left = `${x - 40}px`;
         flower.style.top = `${y - 40}px`;
         document.body.appendChild(flower);
         setTimeout(() => flower.remove(), 2000);
-      });
+      }
     }
 
     document.body.addEventListener("click", (e) => {
-      spawnFlower(e.clientX, e.clientY);
-      clickCount++;
-
       if (clickCount < bgImages.length) {
         document.body.style.backgroundImage = `url(${bgImages[clickCount]})`;
       }
 
-      if (clickCount <= messages.length - 1) {
+      spawnFlower(e.clientX, e.clientY);
+
+      if (clickCount > 0 && clickCount < messages.length) {
         const newBlock = document.createElement("div");
         newBlock.classList.add("block");
         newBlock.textContent = messages[clickCount];
@@ -129,7 +129,7 @@
         setTimeout(() => newBlock.classList.add("visible"), 50);
       }
 
-      if (clickCount === messages.length - 1) {
+      if (clickCount === messages.length) {
         const newBlock = document.createElement("div");
         newBlock.classList.add("block");
         newBlock.innerHTML = `
@@ -140,6 +140,8 @@
         container.appendChild(newBlock);
         setTimeout(() => newBlock.classList.add("visible"), 50);
       }
+
+      clickCount++;
     });
 
     function confettiEffect() {
