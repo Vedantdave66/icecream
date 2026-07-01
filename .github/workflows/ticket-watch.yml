@@ -1,0 +1,53 @@
+name: Portugal vs Croatia Ticket Watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore watcher state (avoids duplicate alert emails)
+        uses: actions/cache/restore@v4
+        with:
+          path: ticket_watch/state.json
+          key: ticket-watch-state-${{ github.run_id }}
+          restore-keys: |
+            ticket-watch-state-
+
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ticket_watch/requirements.txt') }}
+
+      - name: Install dependencies
+        working-directory: ticket_watch
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run scraper
+        working-directory: ticket_watch
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          TO_EMAILS: ${{ secrets.TO_EMAILS }}
+          THRESHOLD_CAD: "2200"
+        run: python scraper.py
+
+      - name: Save watcher state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ticket_watch/state.json
+          key: ticket-watch-state-${{ github.run_id }}
