@@ -1,0 +1,4 @@
+ticket_watch/state.json
+ticket_watch/watch.log
+__pycache__/
+*.pyc
