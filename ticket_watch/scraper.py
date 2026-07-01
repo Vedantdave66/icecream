@@ -3,8 +3,8 @@ Portugal vs Croatia (FIFA World Cup, Match 83, BMO Field Toronto, Jul 2 2026)
 ticket price watcher.
 
 Checks StubHub, SeatGeek and Vivid Seats for the cheapest currently-listed
-face-value tickets, and emails a heads-up when the combined price of the two
-cheapest tickets found is at or below THRESHOLD_CAD.
+face-value tickets and emails a status update on every run, clearly marked
+as either still above or at/below THRESHOLD_CAD.
 
 This is a best-effort scraper. These marketplaces run bot-detection
 (Cloudflare / PerimeterX / Akamai) that may block automated requests,
@@ -20,7 +20,6 @@ currency codes, falling back to counting "CAD"/"USD" mentions) and convert
 USD prices to CAD before comparing against the CAD threshold. Prices whose
 currency can't be determined are dropped rather than guessed.
 """
-import json
 import os
 import re
 import smtplib
@@ -38,8 +37,6 @@ EVENT_URLS = {
 }
 
 THRESHOLD_CAD = float(os.environ.get("THRESHOLD_CAD", "2200"))
-STATE_FILE = os.environ.get("STATE_FILE", "state.json")
-FORCE_SEND = os.environ.get("FORCE_SEND", "false").strip().lower() == "true"
 # Approximate USD->CAD rate used to convert prices found in USD. Update
 # periodically - this is not a live FX lookup.
 USD_TO_CAD_RATE = float(os.environ.get("USD_TO_CAD_RATE", "1.38"))
@@ -108,21 +105,6 @@ def fetch_prices(site, url, page):
     return results
 
 
-def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE) as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"last_alert_price": None}
-
-
-def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
-
-
 def build_status_lines(cheapest_two, combined):
     lines = [
         "Portugal vs Croatia - FIFA World Cup Match 83",
@@ -165,8 +147,12 @@ def build_status_lines(cheapest_two, combined):
 def send_status_email(to_emails, cheapest_two, combined):
     if cheapest_two is None:
         subject = "Portugal vs Croatia tickets - status update (no prices found this check)"
+    elif combined <= THRESHOLD_CAD:
+        subject = (f"Portugal vs Croatia tickets - AT/BELOW ${THRESHOLD_CAD:.0f} CAD cutoff! "
+                    f"(${combined:.2f} CAD for 2, incl. fees/taxes)")
     else:
-        subject = f"Portugal vs Croatia tickets - status update (${combined:.2f} CAD for 2, cutoff ${THRESHOLD_CAD:.0f} CAD incl. fees/taxes)"
+        subject = (f"Portugal vs Croatia tickets - status update: still ABOVE ${THRESHOLD_CAD:.0f} CAD cutoff "
+                    f"(${combined:.2f} CAD for 2, incl. fees/taxes)")
     body = "\n".join(build_status_lines(cheapest_two, combined))
     send_email(subject, body, to_emails)
 
@@ -215,40 +201,17 @@ def main():
 
     if len(flat) < 2:
         print(f"Only {len(flat)} usable CAD-equivalent price point(s) found across all sites this run "
-              "(likely blocked by bot-detection, or currency undetermined) - need at least 2 to compare. "
-              "No alert sent.")
-        if FORCE_SEND:
-            send_status_email(to_emails, None, None)
-            print("Forced status email sent (no price data available).")
+              "(likely blocked by bot-detection, or currency undetermined) - need at least 2 to compare.")
+        send_status_email(to_emails, None, None)
+        print("Status email sent (no price data available).")
         return
 
     cheapest_two = flat[:2]
     combined = cheapest_two[0]["price_cad"] + cheapest_two[1]["price_cad"]
     print(f"Cheapest two: {cheapest_two}, combined=${combined:.2f} CAD, threshold=${THRESHOLD_CAD:.2f} CAD")
 
-    if FORCE_SEND:
-        send_status_email(to_emails, cheapest_two, combined)
-        print("Forced status email sent.")
-        return
-
-    state = load_state()
-    last_alert = state.get("last_alert_price")
-
-    if combined > THRESHOLD_CAD:
-        print("Combined price above threshold; no alert.")
-        return
-
-    if last_alert is not None and combined >= last_alert - 1:
-        print("Already alerted at this price or lower; skipping duplicate email.")
-        return
-
-    subject = f"Portugal vs Croatia tickets found under ${THRESHOLD_CAD:.0f} CAD, incl. fees/taxes (${combined:.2f} for 2)"
-    body = "\n".join(build_status_lines(cheapest_two, combined))
-
-    send_email(subject, body, to_emails)
-    state["last_alert_price"] = combined
-    save_state(state)
-    print("Alert email sent.")
+    send_status_email(to_emails, cheapest_two, combined)
+    print("Status email sent.")
 
 
 if __name__ == "__main__":

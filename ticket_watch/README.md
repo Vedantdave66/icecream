@@ -2,12 +2,20 @@
 
 Checks StubHub, SeatGeek and Vivid Seats every 5 minutes for the
 **Portugal vs Croatia** FIFA World Cup match (BMO Field, Toronto, Jul 2 2026,
-7:00 PM) and emails you + your friends when the combined face value of the
-two cheapest tickets it can find is **at or below $2,200 CAD**.
+7:00 PM) and **emails you + your friends a status update on every check**,
+clearly marked as either still above or at/below the **$2,200 CAD (incl.
+fees/taxes)** cutoff.
 
-Runs automatically as a GitHub Actions scheduled workflow
-(`.github/workflows/ticket-watch.yml`) - nothing needs to stay open on your
-machine.
+Prices are converted to CAD automatically if a site is showing USD (these
+`.com` sites default to USD pricing from a US-based IP, which is what GitHub
+Actions runners have) - see "Currency handling" below.
+
+Runs automatically every 5 minutes via an external cron trigger
+(cron-job.org) hitting the GitHub Actions `workflow_dispatch` API - this is
+more reliable than GitHub's native `schedule:` trigger, which can take a
+long time to activate for a brand-new workflow. The `schedule:` trigger in
+`.github/workflows/ticket-watch.yml` is left in as a redundant backup.
+Nothing needs to stay open on your machine either way.
 
 ## Important limitation
 
@@ -22,6 +30,19 @@ actually getting real prices or getting blocked.
 If it's consistently blocked from GitHub Actions, the same script can be run
 from your own computer instead (a residential IP has better odds), see
 "Running locally" below.
+
+## Currency handling
+
+StubHub/SeatGeek/Vivid Seats are `.com` sites with no separate Canadian
+domain, and they determine currency from the request's IP address, not
+just browser locale - so from a US-hosted GitHub Actions runner they
+typically show **USD**. The scraper detects the actual currency shown per
+site (from the page's embedded data, or by counting CAD/USD mentions) and
+converts USD to CAD (`USD_TO_CAD_RATE`, default 1.38, approximate - not a
+live rate) before comparing to the threshold. The email shows both the
+native price and the converted CAD price whenever a conversion was applied.
+If a site's currency can't be determined at all, its prices are dropped
+rather than risk mislabeling them.
 
 ## One-time setup
 
