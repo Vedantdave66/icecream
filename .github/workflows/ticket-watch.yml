@@ -3,7 +3,12 @@ name: Portugal vs Croatia Ticket Watch
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Send a status email now regardless of the price threshold"
+        type: boolean
+        default: false
 
 jobs:
   check-prices:
@@ -43,6 +48,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           TO_EMAILS: ${{ secrets.TO_EMAILS }}
           THRESHOLD_CAD: "2200"
+          FORCE_SEND: ${{ github.event.inputs.force_send || 'false' }}
         run: python scraper.py
 
       - name: Save watcher state

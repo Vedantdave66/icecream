@@ -30,6 +30,7 @@ EVENT_URLS = {
 
 THRESHOLD_CAD = float(os.environ.get("THRESHOLD_CAD", "2200"))
 STATE_FILE = os.environ.get("STATE_FILE", "state.json")
+FORCE_SEND = os.environ.get("FORCE_SEND", "false").strip().lower() == "true"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -84,6 +85,47 @@ def save_state(state):
         json.dump(state, f)
 
 
+def build_status_lines(cheapest_two, combined):
+    lines = [
+        "Portugal vs Croatia - FIFA World Cup Match 83",
+        "BMO Field, Toronto - Jul 2, 2026, 7:00 PM",
+        "",
+        f"Watching for two tickets with a combined face value (including fees and taxes, "
+        f"i.e. the final all-in checkout price) at or below ${THRESHOLD_CAD:.0f} CAD.",
+        "",
+    ]
+    if cheapest_two is None:
+        lines.append("No usable prices could be extracted from any site on this check "
+                      "(likely blocked by bot-detection) - nothing to report yet.")
+    else:
+        status = "AT OR BELOW" if combined <= THRESHOLD_CAD else "still ABOVE"
+        lines += [
+            f"Cheapest two tickets currently found are {status} the ${THRESHOLD_CAD:.0f} CAD "
+            f"(fees + taxes included) cutoff:",
+            f"  - ${cheapest_two[0][0]:.2f} CAD on {cheapest_two[0][1]}",
+            f"  - ${cheapest_two[1][0]:.2f} CAD on {cheapest_two[1][1]}",
+            f"  - Combined: ${combined:.2f} CAD",
+        ]
+    lines += [
+        "",
+        "Check availability / seat locations before buying - prices and inventory move fast:",
+    ]
+    for site, url in EVENT_URLS.items():
+        lines.append(f"  {site}: {url}")
+    lines.append("")
+    lines.append(f"Checked at {datetime.now(timezone.utc).isoformat()} UTC")
+    return lines
+
+
+def send_status_email(to_emails, cheapest_two, combined):
+    if cheapest_two is None:
+        subject = "Portugal vs Croatia tickets - status update (no prices found this check)"
+    else:
+        subject = f"Portugal vs Croatia tickets - status update (${combined:.2f} CAD for 2, cutoff ${THRESHOLD_CAD:.0f} CAD incl. fees/taxes)"
+    body = "\n".join(build_status_lines(cheapest_two, combined))
+    send_email(subject, body, to_emails)
+
+
 def send_email(subject, body, to_emails):
     smtp_user = os.environ["SMTP_USER"]
     smtp_pass = os.environ["SMTP_PASS"]
@@ -117,11 +159,19 @@ def main():
     if len(flat) < 2:
         print(f"Only {len(flat)} price point(s) found across all sites this run "
               "(likely blocked by bot-detection) - need at least 2 to compare. No alert sent.")
+        if FORCE_SEND:
+            send_status_email(to_emails, None, None)
+            print("Forced status email sent (no price data available).")
         return
 
     cheapest_two = flat[:2]
     combined = cheapest_two[0][0] + cheapest_two[1][0]
     print(f"Cheapest two: {cheapest_two}, combined=${combined:.2f} CAD, threshold=${THRESHOLD_CAD:.2f} CAD")
+
+    if FORCE_SEND:
+        send_status_email(to_emails, cheapest_two, combined)
+        print("Forced status email sent.")
+        return
 
     state = load_state()
     last_alert = state.get("last_alert_price")
@@ -134,23 +184,8 @@ def main():
         print("Already alerted at this price or lower; skipping duplicate email.")
         return
 
-    subject = f"Portugal vs Croatia tickets found under ${THRESHOLD_CAD:.0f} CAD (${combined:.2f} for 2)"
-    lines = [
-        "Portugal vs Croatia - FIFA World Cup Match 83",
-        "BMO Field, Toronto - Jul 2, 2026, 7:00 PM",
-        "",
-        f"Two tickets currently available for a combined face value of ${combined:.2f} CAD "
-        f"(threshold: ${THRESHOLD_CAD:.0f} CAD):",
-        f"  - ${cheapest_two[0][0]:.2f} CAD on {cheapest_two[0][1]}",
-        f"  - ${cheapest_two[1][0]:.2f} CAD on {cheapest_two[1][1]}",
-        "",
-        "Check availability / seat locations before buying - prices and inventory move fast:",
-    ]
-    for site, url in EVENT_URLS.items():
-        lines.append(f"  {site}: {url}")
-    lines.append("")
-    lines.append(f"Checked at {datetime.now(timezone.utc).isoformat()} UTC")
-    body = "\n".join(lines)
+    subject = f"Portugal vs Croatia tickets found under ${THRESHOLD_CAD:.0f} CAD, incl. fees/taxes (${combined:.2f} for 2)"
+    body = "\n".join(build_status_lines(cheapest_two, combined))
 
     send_email(subject, body, to_emails)
     state["last_alert_price"] = combined
